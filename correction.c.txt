@@ -1,0 +1,509 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+// General Formatting
+#define GEN_FORMAT_RESET                "0"
+#define GEN_FORMAT_DIM                  "2"
+
+// Foreground Colors
+#define FOREGROUND_COL_YELLOW           "33"
+
+#define SHELL_COLOR_ESCAPE_SEQ(X) "\x1b["X"m"
+#define SHELL_FORMAT_RESET  SHELL_COLOR_ESCAPE_SEQ(GEN_FORMAT_RESET)
+
+
+
+// Функция за премахване на интервал между дума и многоточие (1)
+void removeSpaceBeforeEllipsis(char *line) {
+    char *ellipsis = strstr(line, "...");
+    if (ellipsis != NULL && *(ellipsis - 1) == ' ') {
+        memmove(ellipsis - 1, ellipsis, strlen(ellipsis) + 1);
+    }
+}
+
+// Функция за премахване на неизлишни точки (2)
+void removeExtraDots(char *line) {
+    char *dot = strstr(line, "..");
+    while (dot != NULL) {
+        memmove(dot, dot + 1, strlen(dot + 1) + 1);
+        dot = strstr(line, "..");
+    }
+
+    char *lastDot = strstr(line, "...");
+    if (lastDot != NULL && *(lastDot + 3) == '.') {
+        memmove(lastDot + 3, lastDot + 4, strlen(lastDot + 4) + 1);
+    }
+}
+
+// Функция за корекция на неправилно пренесен ред при пряка реч (3)
+void fixDirectSpeech(char *line) {
+    char *comma = strchr(line, ',');
+    while (comma != NULL) {
+        if (*(comma - 1) == ' ' && *(comma + 1) == ' ') {
+            memmove(comma - 1, comma, strlen(comma) + 1);
+            *comma = '-';
+        }
+        comma = strchr(comma + 1, ',');
+    }
+}
+
+// Функция за премахване на интервали между препинателни знаци (4)
+void removeSpaceBetweenPunctuation(char *line) {
+    char *punct1 = ",.-?!";
+    char *punct2 = " ,-?!";
+
+    for (int i = 0; i < strlen(punct1); ++i) {
+        for (int j = 0; j < strlen(punct2); ++j) {
+            char *temp = malloc(strlen(line) + 1);
+            char *t = temp;
+            for (char *c = line; *c; ++c) {
+                if (*c == punct1[i] && *(c + 1) == punct2[j]) {
+                    *t++ = punct1[i];
+                } else if (*c != ' ' || *(c + 1) != ' ') {
+                    *t++ = *c;
+                }
+            }
+            *t = '\0';
+            strcpy(line, temp);
+            free(temp);
+        }
+    }
+}
+// Функция за премахване на интервал пред препинателен знак (5)
+void removeSpaceBeforePunctuation(char *sentence) {
+    int length = strlen(sentence);
+    for (int i = 0; i < length - 1; i++) {
+        if (sentence[i] == ' ' && strchr(".,!?;", sentence[i + 1]) != NULL) {
+            memmove(&sentence[i], &sentence[i + 1], length - i);
+            length--;
+            i--; // Проверяваме отново същата позиция, тъй като символът на позиция i се премести назад
+        }
+    }
+}
+
+// Функция за добавяне на интервал след запетая 
+void addSpaceAfterComma(char *line) {
+    char *comma = strchr(line, ',');
+    while (comma != NULL) {
+        if (*(comma + 1) != ' ') {
+            memmove(comma + 2, comma + 1, strlen(comma + 1) + 1);
+            *(comma + 1) = ' ';
+        }
+        comma = strchr(comma + 1, ',');
+    }
+}
+// Проверява дали символът е препинателен знак
+bool isPunctuation(char c) {
+    return c == ',' || c == '.' || c == '!' || c == '?';
+}
+
+// Функция за премахване на ',' от препимателен знак (6)
+void removeCommaFromPunctuation(char *line) {
+    char *comma = strchr(line, ',');
+    if (comma != NULL) {
+        while (*comma != '\0') {
+            if (*(comma + 1) == ' ' && isPunctuation(*(comma + 2))) {
+                memmove(comma, comma + 1, strlen(comma + 1) + 1);
+            } else {
+                comma = strchr(comma + 1, ',');
+            }
+        }
+    }
+}
+
+// Функция за добавяне на интервал между ',' и печатим символ (7)
+void addSpaceAfterCommaAndPrintable(char *line) {
+    char *comma = strchr(line, ',');
+    while (comma != NULL) {
+        if (*(comma + 1) != ' ') {
+            memmove(comma + 2, comma + 1, strlen(comma + 1) + 1);
+            *(comma + 1) = ' ';
+        }
+        comma = strchr(comma + 1, ',');
+    }
+}
+
+// Функция за премахване на интервали между препинателни знаци (8)
+void removeSpaceBetweenPunctuation(char *line) {
+    char *punct1 = ",.-?!";
+    char *punct2 = " ,-?!";
+
+    for (int i = 0; i < strlen(punct1); ++i) {
+        for (int j = 0; j < strlen(punct2); ++j) {
+            char *temp = malloc(strlen(line) + 1);
+            char *t = temp;
+            for (char *c = line; *c; ++c) {
+                if (*c == punct1[i] && *(c + 1) == punct2[j]) {
+                    *t++ = punct1[i];
+                } else if (*c != ' ' || *(c + 1) != ' ') {
+                    *t++ = *c;
+                }
+            }
+            *t = '\0';
+            strcpy(line, temp);
+            free(temp);
+        }
+    }
+}
+
+// Функция за премахване на ',' след начална дума в изречението (9)
+void removeCommaAfterFirstWord(char *line) {
+    char *comma = strchr(line, ',');
+    if (comma != NULL) {
+        if (*(comma + 1) == ' ') {
+            memmove(comma, comma + 1, strlen(comma + 1) + 1);
+        }
+    }
+}
+
+// Функция за добавяне на задължителна ',' след начална дума в изречението (10)
+void addCommaAfterFirstWord(char *line) {
+    char *space = strchr(line, ' ');
+    if (space != NULL && *(space + 1) != ',' && *(space + 1) != '\0') {
+        memmove(space + 2, space + 1, strlen(space + 1) + 1);
+        *(space + 1) = ',';
+    }
+}
+// Правило 11: Задължителна ',' пред и след дума
+void addCommaAroundWord(char *sentence, char *word) {
+    char *ptr = strstr(sentence, word);
+    if (ptr != NULL) {
+        int wordLen = strlen(word);
+        int pos = ptr - sentence;
+        
+        // Проверка и добавяне на запетая преди думата
+        if (pos > 0 && !isspace(sentence[pos - 1]) && !ispunct(sentence[pos - 1])) {
+            memmove(&sentence[pos], &sentence[pos - 1], strlen(sentence) - pos + 1);
+            sentence[pos - 1] = ',';
+        }
+
+        // Пропускане на запетаята преди думата
+        pos += wordLen;
+
+        // Пропускане на интервалите след думата
+        while (isspace(sentence[pos])) pos++;
+
+        // Проверка и добавяне на запетая след думата
+        if (pos < strlen(sentence) && !ispunct(sentence[pos])) {
+            memmove(&sentence[pos + 1], &sentence[pos], strlen(sentence) - pos + 1);
+            sentence[pos] = ',';
+        }
+    }
+}
+
+// Правило 12: Премахване на ',' след съюз
+void removeCommaAfterConjunction(char *sentence, char *conjunction) {
+    char *ptr = strstr(sentence, conjunction);
+    if (ptr != NULL) {
+        int conjunctionLen = strlen(conjunction);
+        int pos = ptr - sentence + conjunctionLen;
+
+        // Проверка и премахване на запетая след съюза
+        if (sentence[pos] == ',') {
+            memmove(&sentence[pos], &sentence[pos + 1], strlen(sentence) - pos + 1);
+        }
+    }
+}
+
+// Правило 13: Преместване на ','
+void moveComma(char *sentence, char *phrase) {
+    char *ptr = strstr(sentence, phrase);
+    if (ptr != NULL) {
+        int phraseLen = strlen(phrase);
+        int pos = ptr - sentence + phraseLen;
+
+        // Проверка и преместване на запетая
+        if (sentence[pos] == ',') {
+            memmove(&sentence[phraseLen + 1], &sentence[phraseLen], pos - phraseLen);
+            sentence[phraseLen] = ',';
+        }
+    }
+}
+
+// Правило 14: Премахване на ',' след уточняващо наречие
+void removeCommaAfterAdverb(char *sentence, char *adverb) {
+    char *ptr = strstr(sentence, adverb);
+    if (ptr != NULL) {
+        int adverbLen = strlen(adverb);
+        int pos = ptr - sentence + adverbLen;
+
+        // Проверка и премахване на запетая след уточняващото наречие
+        if (sentence[pos] == ',') {
+            memmove(&sentence[pos], &sentence[pos + 1], strlen(sentence) - pos + 1);
+        }
+    }
+}
+//Добавяне на ',' (15)
+void addCommaAfterNot(char *sentence, const char *word, const char *separator) {
+    char *ptr = strstr(sentence, word);
+    if (ptr != NULL) {
+        int wordLen = strlen(word);
+        int pos = ptr - sentence + wordLen;
+
+        // Проверка и добавяне на запетая след "не"
+        if (strncmp(&sentence[pos], separator, strlen(separator)) == 0) {
+            memmove(&sentence[pos + strlen(separator) + 1], &sentence[pos + strlen(separator)], strlen(sentence) - pos + strlen(separator) + 1);
+            sentence[pos + strlen(separator)] = ',';
+        }
+    }
+}
+
+//16. Добавяне на ','
+void addCommasAfterUnfortunately(char *sentence, const char *phrase) {
+    char *ptr = strstr(sentence, phrase);
+    while (ptr != NULL) {
+        int pos = ptr - sentence;
+
+        // Добавяне на запетая преди фразата "За съжаление"
+        if (pos > 0 && sentence[pos - 1] != ',') {
+            memmove(&sentence[pos + 1], &sentence[pos], strlen(sentence) - pos + 1);
+            sentence[pos] = ',';
+        }
+
+        int phraseLen = strlen(phrase);
+        int newPos = pos + phraseLen;
+
+        // Добавяне на запетая след фразата "За съжаление"
+        if (sentence[newPos] != ',' && sentence[newPos] != '\0') {
+            memmove(&sentence[newPos + 1], &sentence[newPos], strlen(sentence) - newPos + 1);
+            sentence[newPos] = ',';
+        }
+
+        // Продължаване с търсенето
+        ptr = strstr(&sentence[newPos + 1], phrase);
+    }
+}
+//17: Премахване на ','
+void removeCommaBetweenWords(char *sentence, const char *word1, const char *separator, const char *word2) {
+    char *ptr1 = strstr(sentence, word1);
+    while (ptr1 != NULL) {
+        char *ptr2 = strstr(ptr1 + strlen(word1), word2);
+        if (ptr2 != NULL) {
+            char *comma = strstr(ptr1, ",");
+            if (comma != NULL && comma < ptr2) {
+                memmove(comma, comma + 1, strlen(comma));
+            }
+        }
+        ptr1 = strstr(ptr1 + strlen(word1), word1);
+    }
+}
+
+//18: Премахване на ',' пред 'че'
+void removeCommaBeforeThat(char *sentence, const char *word, const char *separator) {
+    char *ptr = strstr(sentence, word);
+    while (ptr != NULL) {
+        if (ptr > sentence && *(ptr - 1) == ',') {
+            memmove(ptr - 1, ptr, strlen(ptr));
+        }
+        ptr = strstr(ptr + strlen(word), word);
+    }
+}
+
+// 19: Премахване на ',' че,<шп>за да
+void removeCommaBeforeAndAfter(char *sentence, const char *word1, const char *separator, const char *word2) {
+    char *ptr1 = strstr(sentence, word1);
+    while (ptr1 != NULL) {
+        char *ptr2 = strstr(ptr1 + strlen(word1), word2);
+        if (ptr2 != NULL) {
+            char *comma1 = strstr(ptr1, ",");
+            char *comma2 = strstr(ptr2, ",");
+            if (comma1 != NULL && comma2 != NULL && comma1 < ptr2 && comma2 > ptr2) {
+                memmove(comma1, comma1 + 1, strlen(comma1));
+                memmove(comma2 - 1, comma2, strlen(comma2));
+            }
+        }
+        ptr1 = strstr(ptr1 + strlen(word1), word1);
+    }
+}
+
+// Правило 20: Добавяне на ','
+void addCommaBeforeAs(char *sentence, const char *word, const char *separator) {
+    char *ptr = strstr(sentence, word);
+    while (ptr != NULL) {
+        char *space = strstr(ptr, separator);
+        if (space != NULL) {
+            int spacePos = space - sentence;
+            if (spacePos > 0 && sentence[spacePos - 1] != ',') {
+                memmove(space + 1, space, strlen(space) + 1);
+                sentence[spacePos] = ',';
+            }
+        }
+        ptr = strstr(ptr + strlen(word), word);
+    }
+}
+// Правило 21: Добавяне на ','
+void addCommaAfterPreposition(char *sentence, const char *preposition, const char *word, const char *separator) {
+    char *ptr = strstr(sentence, preposition);
+    while (ptr != NULL) {
+        char *space = strstr(ptr, separator);
+        if (space != NULL) {
+            int spacePos = space - sentence;
+            if (spacePos > 0 && sentence[spacePos - 1] != ',') {
+                memmove(space + 1, space, strlen(space) + 1);
+                sentence[spacePos] = ',';
+            }
+        }
+        ptr = strstr(ptr + strlen(preposition), preposition);
+    }
+}
+
+// Правило 22: Премахване на ',' пред 'естествено'
+void removeCommaBeforeNatural(char *sentence, const char *word, const char *separator) {
+    char *ptr = strstr(sentence, word);
+    while (ptr != NULL) {
+        if (ptr > sentence && *(ptr - 1) == ',') {
+            memmove(ptr - 1, ptr, strlen(ptr));
+        }
+        ptr = strstr(ptr + strlen(word), word);
+    }
+}
+
+// Правило 23: Кога се слага 'във'
+void addInWhenNecessary(char *sentence, const char *word, const char *separator) {
+    char *ptr = strstr(sentence, word);
+    while (ptr != NULL) {
+        if (*(ptr + strlen(word)) == ' ') {
+            memmove(ptr + strlen(word) + 1, ptr + strlen(word), strlen(ptr + strlen(word)) + 1);
+            *(ptr + strlen(word)) = ',';
+        }
+        ptr = strstr(ptr + strlen(word), word);
+    }
+}
+
+// Правило 24: Кога се слага 'със'
+void addWithWhenNecessary(char *sentence, const char *word, const char *separator) {
+    char *ptr = strstr(sentence, word);
+    while (ptr != NULL) {
+        if (*(ptr + strlen(word)) == ' ') {
+            memmove(ptr + strlen(word) + 1, ptr + strlen(word), strlen(ptr + strlen(word)) + 1);
+            *(ptr + strlen(word)) = ',';
+        }
+        ptr = strstr(ptr + strlen(word), word);
+    }
+}
+
+// Правило 25: Добавяне на ','
+void addCommaAfterWord(char *sentence, const char *word, const char *wordType, const char *separator) {
+    char *ptr = strstr(sentence, word);
+    while (ptr != NULL) {
+        char *space = strstr(ptr, separator);
+        if (space != NULL) {
+            int spacePos = space - sentence;
+            if (spacePos > 0 && sentence[spacePos - 1] != ',') {
+                memmove(space + 1, space, strlen(space) + 1);
+                sentence[spacePos] = ',';
+            }
+        }
+        ptr = strstr(ptr + strlen(word), word);
+    }
+}
+
+
+void highlightError(char *line) {
+    fputs(SHELL_COLOR_ESCAPE_SEQ(GEN_FORMAT_DIM";"FOREGROUND_COL_YELLOW), stdout);
+    fputs(line, stdout);
+    fputs(SHELL_FORMAT_RESET, stdout);
+}
+
+void correctSpelling(char *line) {
+    removeSpaceBeforeEllipsis(line);
+    removeExtraDots(line);
+    fixDirectSpeech(line);
+    removeSpaceBetweenPunctuation(line);
+    addSpaceAfterComma(line);
+    addSpaceAfterCommaAndPrintable(line);
+    removeSpaceBetweenPunctuation(line);
+    removeCommaAfterFirstWord(line);
+    addCommaAfterFirstWord(line);
+    addCommaAroundWord(line, word);
+    removeCommaAfterConjunction(line, conjunction);
+    moveComma(line, phrase);
+    removeCommaAfterAdverb(line, adverb);
+    addCommaAfterNot(line, word, separator);
+    addCommasAfterUnfortunately(line, phrase);
+    removeCommaBetweenWords(line, word1, separator, word2);
+    removeCommaBeforeThat(line, word, separator);
+    removeCommaBeforeAndAfter(line, word1, separator, word2);
+    addCommaBeforeAs(line, word, separator);
+    addCommaAfterPreposition(line, preposition, word, separator);
+    removeCommaBeforeNatural(line, word, separator);
+    addInWhenNecessary(line, word, separator);
+    addWithWhenNecessary(line, word, separator);
+    addCommaAfterWord(line, word, wordType, separator);
+
+	// Оцветяване на грешките
+    highlightError(line);
+}
+
+
+/*int main() {
+    FILE *inputFile, *outputFile;
+    char buffer[1000];
+
+    inputFile = fopen("input.txt", "rb");
+    if (inputFile == NULL) {
+        printf("Грешка при отварянето на входния файл.\n");
+        return 1;
+    }
+    outputFile = fopen("output.txt", "wb");
+    if (outputFile == NULL) {
+        printf("Грешка при отварянето на изходния файл.\n");
+        fclose(inputFile);
+        return 1;
+    }
+
+    size_t bytesRead;
+    while ((bytesRead = fread(buffer, 1, sizeof(buffer), inputFile)) > 0) {
+        correctSpelling(buffer);
+        fwrite(buffer, 1, bytesRead, outputFile);
+    }
+
+    fclose(inputFile);
+    fclose(outputFile);
+
+    printf("Корекцията на правописа е завършена успешно.\n");
+
+    return 0;
+}*/
+int main() {
+    int inputFile, outputFile;
+    char buffer[1000];
+
+    // Отваряне на входния файл за четене
+    inputFile = open("input.txt", O_RDONLY | O_CREAT);
+    if (inputFile < 0) {
+        printf("Грешка при отварянето на входния файл.\n");
+        return 1;
+    }
+
+    // Отваряне на изходния файл за писане
+    outputFile = open("output.txt", O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (outputFile < 0) {
+        printf("Грешка при отварянето на изходния файл.\n");
+        close(inputFile);
+        return 1;
+    }
+
+    ssize_t bytesRead;
+    while ((bytesRead = read(inputFile, buffer, sizeof(buffer))) > 0) {
+        correctSpelling(buffer);
+        // Запис на променените данни в изходния файл
+        if (write(outputFile, buffer, bytesRead) != bytesRead) {
+            printf("Грешка при запис в изходния файл.\n");
+            close(inputFile);
+            close(outputFile);
+            return 1;
+        }
+    }
+
+    close(inputFile);
+    close(outputFile);
+
+    printf("Корекцията на правописа е завършена успешно.\n");
+
+    return 0;
+}
